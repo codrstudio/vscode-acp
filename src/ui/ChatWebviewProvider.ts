@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { marked } from 'marked';
 import { SessionManager } from '../core/SessionManager';
 import { SessionUpdateHandler, SessionUpdateListener } from '../handlers/SessionUpdateHandler';
@@ -16,6 +18,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private updateListener: SessionUpdateListener;
   private _hasChatContent = false;
+  private lastActiveFile: { ref: string; name: string } | null = null;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -95,6 +98,8 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         case 'ready':
           // Webview loaded — send current session state
           this.sendCurrentState();
+          // Reoferece o arquivo aberto como contexto (sobrevive a reload do webview).
+          this.setActiveFile(vscode.window.activeTextEditor?.document);
           break;
         case 'renderMarkdown': {
           // Webview requests markdown rendering for history items
@@ -1028,6 +1033,150 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     .send-stop-btn.stop:hover {
       opacity: 0.9;
     }
+    .input-send-row { gap: 6px; align-items: center; }
+    .input-send-spacer { flex: 1; }
+
+    /* Botão de anexo, junto da caixa de texto */
+    .attach-btn {
+      flex: 0 0 auto;
+      width: 28px;
+      height: 24px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--vscode-descriptionForeground, #999);
+      font-size: 14px;
+      line-height: 24px;
+    }
+    .attach-btn:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.1));
+      color: var(--vscode-foreground);
+    }
+    .attach-btn svg { vertical-align: middle; }
+    .send-stop-btn svg { vertical-align: middle; margin-right: 2px; }
+    .send-stop-btn.stop { display: inline-flex; align-items: center; gap: 3px; }
+    .chip-name svg { vertical-align: middle; opacity: 0.7; }
+
+    /* Chips de contexto (arquivo aberto + anexos) */
+    .attach-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 0 8px 4px;
+    }
+    .attach-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      max-width: 100%;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 11px;
+      background: var(--vscode-editorWidget-background, rgba(255,255,255,0.05));
+      border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.12));
+      color: var(--vscode-foreground);
+    }
+    .attach-chip .chip-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 160px;
+    }
+    .attach-chip .chip-tag {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--vscode-descriptionForeground, #999);
+    }
+    .attach-chip .chip-x {
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--vscode-descriptionForeground, #999);
+      padding: 0;
+      font-size: 11px;
+      line-height: 1;
+    }
+    .attach-chip .chip-x:hover { color: var(--vscode-inputValidation-errorForeground, #f48771); }
+
+
+    /* Zona de fila — mensagens aguardando o turno atual terminar */
+    .queue-zone {
+      margin: 0 8px 6px;
+      border: 1px solid var(--vscode-panel-border, rgba(255,255,255,0.12));
+      border-radius: 8px;
+      background: var(--vscode-editorWidget-background, rgba(255,255,255,0.03));
+      overflow: hidden;
+    }
+    .queue-zone-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--vscode-descriptionForeground, #999);
+      font-weight: 600;
+    }
+    .queue-clear {
+      margin-left: auto;
+      padding: 0 6px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--vscode-descriptionForeground, #999);
+      font-size: 10px;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .queue-clear:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.1));
+      color: var(--vscode-inputValidation-errorForeground, #f48771);
+    }
+    .queue-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 0 6px 6px;
+    }
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: var(--vscode-input-background, rgba(255,255,255,0.04));
+    }
+    .queue-item-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--vscode-foreground);
+    }
+    .queue-cancel {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--vscode-descriptionForeground, #999);
+      font-size: 12px;
+      line-height: 18px;
+    }
+    .queue-cancel:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.1));
+      color: var(--vscode-inputValidation-errorForeground, #f48771);
+    }
 
     /* Slash command autocomplete popup */
     .slash-popup {
@@ -1131,24 +1280,23 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
   <div class="messages" id="messages">
     <div class="empty-state" id="emptyState">
-      <div class="icon">🤖</div>
-      <div class="title">ACP Chat</div>
-      <div class="subtitle">Connect to an AI coding agent to start chatting.</div>
-      <div class="actions">
-        <button class="action-btn primary" id="welcomeConnectAgent">
-          🔌 Connect to Agent
-        </button>
-        <button class="action-btn secondary" id="welcomeAddAgent">
-          ⚙ Add Agent
-        </button>
-      </div>
-      <div class="hint">or press <kbd>Ctrl+Shift+A</kbd> anytime</div>
+      <div class="icon"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></div>
+      <div class="title">Comece uma conversa</div>
+      <div class="subtitle">Digite abaixo para falar com o agente. Anexe arquivos pelo clipe.</div>
     </div>
   </div>
 
   <div class="input-area" id="inputArea">
     <div class="slash-popup" id="slashPopup">
       <div class="slash-popup-header">Commands</div>
+    </div>
+    <!-- Fila de mensagens aguardando o turno atual terminar -->
+    <div class="queue-zone" id="queueZone" style="display:none">
+      <div class="queue-zone-header">
+        <span id="queueCount">0</span> na fila
+        <button class="queue-clear" id="queueClear" title="Limpar a fila">limpar</button>
+      </div>
+      <div class="queue-list" id="queueList"></div>
     </div>
     <div class="input-resize-handle" id="resizeHandle"></div>
     <div class="input-toolbar">
@@ -1173,6 +1321,8 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
       </div>
       <span class="toolbar-spacer"></span>
     </div>
+    <!-- Chips de contexto: arquivo aberto + anexos manuais -->
+    <div class="attach-row" id="attachRow" style="display:none"></div>
     <div class="input-editor-wrap">
       <textarea
         id="promptInput"
@@ -1181,6 +1331,9 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
       ></textarea>
     </div>
     <div class="input-send-row">
+      <button class="attach-btn" id="attachBtn" title="Anexar arquivo como contexto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+      <span class="input-send-spacer"></span>
+      <button class="send-stop-btn stop" id="stopBtn" style="display:none" title="Interromper o turno atual (Esc)"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect width="12" height="12" x="6" y="6" rx="2"/></svg> Stop</button>
       <button class="send-stop-btn send" id="sendStopBtn">Send</button>
     </div>
   </div>
@@ -1200,6 +1353,13 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     const emptyState = document.getElementById('emptyState');
     const promptInput = document.getElementById('promptInput');
     const sendStopBtn = document.getElementById('sendStopBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const queueZone = document.getElementById('queueZone');
+    const queueList = document.getElementById('queueList');
+    const queueCount = document.getElementById('queueCount');
+    const queueClear = document.getElementById('queueClear');
+    const attachRow = document.getElementById('attachRow');
+    const attachBtn = document.getElementById('attachBtn');
     const statusEl = document.getElementById('status');
     const sessionBanner = document.getElementById('sessionBanner');
     const bannerAgent = document.getElementById('bannerAgent');
@@ -1221,6 +1381,15 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
     let hasActiveSession = false;
     let isProcessing = false;
+    // Fila de mensagens enviadas em pleno turno. Serializada aqui no webview:
+    // despacho o próximo só no promptEnd, sem tocar na concorrência do agente.
+    let messageQueue = []; // [{ text, el }]
+    // Contexto anexado. openFile = o arquivo aberto no editor (auto, removível);
+    // attachedFiles = anexos manuais (botão de anexo). Ambos viram preâmbulo no
+    // prompt — a Kai lê pelas mãos se relevante.
+    let attachedFiles = []; // [{ path, name }]
+    let openFile = null;    // { path, name } | null
+    let openFileDismissed = false;
 
     // Modes / models state (legacy fallback path)
     let availableModes = [];
@@ -1404,61 +1573,177 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        if (isProcessing) {
-          handleCancel();
-        } else {
-          handleSend();
-        }
+        handleSend(); // enfileira sozinho se um turno estiver em curso
       }
     });
 
     function handleSend() {
       const text = promptInput.value.trim();
-      if (!text || isProcessing) return;
-
-      addMessage('user', text);
+      if (!text) return;
       promptInput.value = '';
-      vscode.postMessage({ type: 'sendPrompt', text });
+
+      const ctx = currentContextFiles();
+      if (isProcessing) {
+        // Turno em curso → enfileira (o contexto viaja com a mensagem).
+        enqueueMessage(text, ctx);
+      } else {
+        addMessage('user', text);
+        vscode.postMessage({ type: 'sendPrompt', text: withContextFiles(text, ctx) });
+      }
+      consumeAttachments();
+    }
+
+    // A fila mora numa zona dedicada acima do input (chips com contador + ✕ +
+    // "limpar") — fica claro o que está pendente vs. o que já foi enviado. O
+    // item só entra no chat/histórico quando de fato despachado (no promptEnd).
+    function renderQueue() {
+      if (!queueZone) return;
+      queueList.innerHTML = '';
+      for (const item of messageQueue) {
+        const row = document.createElement('div');
+        row.className = 'queue-item';
+        const t = document.createElement('span');
+        t.className = 'queue-item-text';
+        t.textContent = item.text;
+        t.title = item.text;
+        row.appendChild(t);
+        const cancel = document.createElement('button');
+        cancel.className = 'queue-cancel';
+        cancel.textContent = '✕';
+        cancel.title = 'Remover da fila';
+        cancel.addEventListener('click', () => cancelQueued(item));
+        row.appendChild(cancel);
+        queueList.appendChild(row);
+      }
+      queueCount.textContent = String(messageQueue.length);
+      queueZone.style.display = messageQueue.length ? '' : 'none';
+    }
+
+    function enqueueMessage(text, ctx) {
+      messageQueue.push({ text, ctx: ctx || [] });
+      renderQueue();
+    }
+
+    function cancelQueued(item) {
+      const i = messageQueue.indexOf(item);
+      if (i >= 0) messageQueue.splice(i, 1);
+      renderQueue();
+    }
+
+    function clearQueue() {
+      messageQueue = [];
+      renderQueue();
+    }
+
+    // Chamado no promptEnd: se há fila e nada rodando, tira o próximo item da
+    // zona, joga no chat como mensagem enviada e despacha.
+    function dispatchNextQueued() {
+      if (isProcessing || messageQueue.length === 0) return;
+      const item = messageQueue.shift();
+      renderQueue();
+      addMessage('user', item.text);
+      vscode.postMessage({ type: 'sendPrompt', text: withContextFiles(item.text, item.ctx) });
     }
 
     function handleCancel() {
       vscode.postMessage({ type: 'cancelTurn' });
     }
 
+    // --- Anexos / contexto ---
+    function currentContextFiles() {
+      const files = [];
+      if (openFile && !openFileDismissed) files.push(openFile);
+      for (const f of attachedFiles) {
+        if (!files.some((x) => x.ref === f.ref)) files.push(f);
+      }
+      return files;
+    }
+
+    function renderAttachments() {
+      if (!attachRow) return;
+      attachRow.innerHTML = '';
+      const files = currentContextFiles();
+      for (const f of files) {
+        const isOpen = openFile && f.ref === openFile.ref && !openFileDismissed
+                       && !attachedFiles.some((x) => x.ref === f.ref);
+        const chip = document.createElement('div');
+        chip.className = 'attach-chip';
+        const name = document.createElement('span');
+        name.className = 'chip-name';
+        name.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg> ';
+        name.appendChild(document.createTextNode(f.name));
+        name.title = f.ref;
+        chip.appendChild(name);
+        if (isOpen) {
+          const tag = document.createElement('span');
+          tag.className = 'chip-tag';
+          tag.textContent = 'aberto';
+          chip.appendChild(tag);
+        }
+        const x = document.createElement('button');
+        x.className = 'chip-x';
+        x.textContent = '✕';
+        x.title = 'Remover do contexto';
+        x.addEventListener('click', () => removeAttachment(f));
+        chip.appendChild(x);
+        attachRow.appendChild(chip);
+      }
+      attachRow.style.display = files.length ? 'flex' : 'none';
+    }
+
+    function removeAttachment(f) {
+      if (openFile && f.ref === openFile.ref) openFileDismissed = true;
+      attachedFiles = attachedFiles.filter((x) => x.ref !== f.ref);
+      renderAttachments();
+    }
+
+    // Anexos viram INSTRUÇÃO pra ler pela mão (hands_read) — validado no SDK: o
+    // @path é amarrado à Read nativa (desligada no nosso agente); a mão é o único
+    // caminho, e imagens voltam como visão. Refs materializadas dentro do mount.
+    function withContextFiles(text, files) {
+      if (!files || files.length === 0) return text;
+      const list = files.filter((f) => f.ref).map((f) => '- ' + f.ref).join('\\n');
+      if (!list) return text;
+      const note = '[O usuário anexou estes arquivos ao contexto. Leia cada um com a ferramenta hands_read para vê-lo (imagens voltam como imagem que você enxerga):\\n'
+        + list + ']';
+      return text ? text + '\\n\\n' + note : note;
+    }
+
+    function consumeAttachments() {
+      // Anexos manuais são por-mensagem; o arquivo aberto é pegajoso (reflete o editor).
+      attachedFiles = [];
+      renderAttachments();
+    }
+
+
     function execCmd(command) {
       vscode.postMessage({ type: 'executeCommand', command });
     }
 
     // Wire up buttons
-    sendStopBtn.addEventListener('click', () => {
-      if (isProcessing) {
+    sendStopBtn.addEventListener('click', () => handleSend());
+    if (stopBtn) stopBtn.addEventListener('click', () => handleCancel());
+    if (queueClear) queueClear.addEventListener('click', () => clearQueue());
+    if (attachBtn) attachBtn.addEventListener('click', () => execCmd('acp.attachFile'));
+    // Esc no input = interromper o turno atual (o Stop dedicado).
+    promptInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isProcessing) {
+        e.preventDefault();
         handleCancel();
-      } else {
-        handleSend();
       }
     });
 
-    const welcomeConnectAgent = document.getElementById('welcomeConnectAgent');
-    const welcomeAddAgent = document.getElementById('welcomeAddAgent');
-    if (welcomeConnectAgent) welcomeConnectAgent.addEventListener('click', () => execCmd('acp.connectAgent'));
-    if (welcomeAddAgent) welcomeAddAgent.addEventListener('click', () => execCmd('acp.addAgent'));
 
     // --- Send/Stop toggle ---
     function setProcessing(processing) {
       isProcessing = processing;
-      if (processing) {
-        sendStopBtn.className = 'send-stop-btn stop';
-        sendStopBtn.textContent = '■ Stop';
-        sendStopBtn.disabled = false;
-        promptInput.disabled = true;
-        statusEl.innerHTML = '<span class="spinner"></span>';
-      } else {
-        sendStopBtn.className = 'send-stop-btn send';
-        sendStopBtn.textContent = 'Send';
-        sendStopBtn.disabled = false;
-        promptInput.disabled = false;
-        statusEl.textContent = '';
-      }
+      // O input NUNCA trava — é o que permite a fila em pleno turno.
+      promptInput.disabled = false;
+      sendStopBtn.className = 'send-stop-btn send';
+      sendStopBtn.textContent = 'Send';
+      sendStopBtn.disabled = false;
+      if (stopBtn) stopBtn.style.display = processing ? '' : 'none';
+      statusEl.innerHTML = processing ? '<span class="spinner"></span>' : '';
     }
 
     // --- Session/load overlay ---
@@ -2236,6 +2521,25 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
           }
           break;
 
+        case 'file-attached':
+          if (msg.ref && !attachedFiles.some((f) => f.ref === msg.ref)) {
+            attachedFiles.push({ ref: msg.ref, name: msg.name || msg.ref });
+            renderAttachments();
+          }
+          break;
+
+        case 'active-file':
+          // Arquivo aberto no editor (auto-contexto). null = nenhum editor ativo.
+          if (msg.file && msg.file.ref) {
+            openFile = { ref: msg.file.ref, name: msg.file.name || msg.file.ref };
+            openFileDismissed = false; // arquivo mudou → reoferece
+            renderAttachments();
+          } else if (openFile) {
+            openFile = null;
+            renderAttachments();
+          }
+          break;
+
         case 'promptStart':
           setProcessing(true);
           currentAssistantEl = null;
@@ -2293,10 +2597,14 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
           currentThoughtText = '';
           thoughtStartTime = null;
           thoughtEndTime = null;
+          // Turno fechou → se há mensagens na fila, despacha a próxima.
+          dispatchNextQueued();
           break;
 
         case 'clearChat':
           chatHistory = [];
+          messageQueue = [];
+          renderQueue();
           sessionState = null;
           saveState();
           currentAssistantEl = null;
@@ -2533,15 +2841,65 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
   /**
    * Attach a file URI — notify the webview to include it in the next prompt.
    */
-  attachFile(uri: vscode.Uri): void {
-    if (this.view) {
-      this.view.webview.postMessage({
-        type: 'file-attached',
-        path: uri.fsPath,
-        name: uri.fsPath.split(/[\\/]/).pop() || uri.fsPath,
-      });
+  // Anexo pelo mecanismo REAL do hammer (validado na fonte do SDK): materializa
+  // o arquivo em `<cwd>/.tmp/uploads/{guid}.{ext}` (um caminho legível pelo CLI,
+  // co-locado) e o agente referencia com `@"path"` no prompt — o CLI auto-lê e
+  // injeta como bloco nativo (imagem/documento/texto). NÃO embute base64: o CLI
+  // materializa por dentro. Remote-safe: o arquivo passa a viver no lado do CLI.
+  async attachFile(uri: vscode.Uri): Promise<void> {
+    if (!this.view) { return; }
+    const name = uri.fsPath.split(/[\\/]/).pop() || uri.fsPath;
+    try {
+      const ref = await this.materialize(uri);
+      this.view.webview.postMessage({ type: 'file-attached', name, ref });
       this.view.show?.(true);
+    } catch {
+      this.view.webview.postMessage({ type: 'file-attached', name, error: true });
     }
+  }
+
+  /**
+   * Informa o webview do arquivo aberto no editor (auto-contexto). Referência: o
+   * próprio caminho (relativo à cwd se dentro dela, senão absoluto co-locado) —
+   * já é um arquivo real que o CLI lê. `undefined` = sem editor de arquivo.
+   */
+  setActiveFile(doc: vscode.TextDocument | undefined): void {
+    if (!doc || doc.uri.scheme !== 'file') {
+      this.lastActiveFile = null;
+      this.view?.webview.postMessage({ type: 'active-file', file: null });
+      return;
+    }
+    const ref = this.refForPath(doc.uri);
+    this.lastActiveFile = { ref, name: doc.uri.fsPath.split(/[\\/]/).pop() || doc.uri.fsPath };
+    this.view?.webview.postMessage({ type: 'active-file', file: this.lastActiveFile });
+  }
+
+  /**
+   * Copia o arquivo pra `<cwd>/.tmp/uploads/{guid}.{ext}` e devolve a ref
+   * relativa (`@path`). Sem cwd (nenhuma pasta aberta) → ref absoluta co-locada.
+   */
+  private async materialize(uri: vscode.Uri): Promise<string> {
+    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!cwd) { return uri.fsPath.split(/[\\/]/).join('/'); }
+    const ext = path.extname(uri.fsPath);
+    const rel = `.tmp/uploads/${randomUUID()}${ext}`;
+    const dest = vscode.Uri.joinPath(cwd, ...rel.split('/'));
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    await vscode.workspace.fs.writeFile(dest, bytes); // cria os diretórios
+    return rel;
+  }
+
+  /** Ref pra um arquivo já em disco: relativa à cwd se dentro dela, senão absoluta. */
+  private refForPath(uri: vscode.Uri): string {
+    const folder = vscode.workspace.getWorkspaceFolder(uri)
+      ?? vscode.workspace.workspaceFolders?.[0];
+    if (folder) {
+      const rel = path.relative(folder.uri.fsPath, uri.fsPath);
+      if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+        return rel.split(path.sep).join('/');
+      }
+    }
+    return uri.fsPath.split(/[\\/]/).join('/');
   }
 
   dispose(): void {

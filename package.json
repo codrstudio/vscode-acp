@@ -44,27 +44,12 @@
     "views": {
       "acp-client": [
         {
-          "id": "acp-sessions",
-          "name": "Agents",
-          "type": "tree"
-        },
-        {
           "id": "acp-chat",
           "name": "Chat",
           "type": "webview"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "acp-sessions",
-        "contents": "No agents configured.\n[Add Agent](command:acp.addAgent)\nConfigure agents in settings or browse the [Agent Registry](command:acp.browseRegistry)."
-      },
-      {
-        "view": "acp-chat",
-        "contents": "Start chatting with an AI coding agent.\n[Connect to Agent](command:acp.connectAgent)\nSelect an agent from the list above to begin."
-      }
-    ],
     "commands": [
       {
         "command": "acp.connectAgent",
@@ -161,57 +146,22 @@
     ],
     "menus": {
       "commandPalette": [
-        {
-          "command": "acp.openSession",
-          "when": "false"
-        },
-        {
-          "command": "acp.loadMoreSessions",
-          "when": "false"
-        },
-        {
-          "command": "acp.copySessionId",
-          "when": "false"
-        },
-        {
-          "command": "acp.forgetSession",
-          "when": "false"
-        }
+        { "command": "acp.openSession", "when": "false" },
+        { "command": "acp.loadMoreSessions", "when": "false" },
+        { "command": "acp.copySessionId", "when": "false" },
+        { "command": "acp.forgetSession", "when": "false" },
+        { "command": "acp.refreshAgents", "when": "false" },
+        { "command": "acp.refreshSessions", "when": "false" },
+        { "command": "acp.removeAgent", "when": "false" },
+        { "command": "acp.browseRegistry", "when": "false" },
+        { "command": "acp.connectAgent", "when": "false" },
+        { "command": "acp.disconnectAgent", "when": "false" }
       ],
       "view/title": [
-        {
-          "command": "acp.addAgent",
-          "when": "view == acp-sessions",
-          "group": "navigation@1"
-        },
-        {
-          "command": "acp.refreshAgents",
-          "when": "view == acp-sessions",
-          "group": "navigation@2"
-        },
-        {
-          "command": "acp.browseRegistry",
-          "when": "view == acp-sessions"
-        },
         {
           "command": "acp.newConversation",
           "when": "view == acp-chat",
           "group": "navigation@1"
-        },
-        {
-          "command": "acp.attachFile",
-          "when": "view == acp-chat",
-          "group": "navigation@2"
-        },
-        {
-          "command": "acp.cancelTurn",
-          "when": "view == acp-chat && acp.turnInProgress",
-          "group": "navigation@3"
-        },
-        {
-          "command": "acp.disconnectAgent",
-          "when": "view == acp-chat",
-          "group": "navigation@4"
         },
         {
           "command": "acp.showLog",
@@ -224,41 +174,6 @@
         {
           "command": "acp.restartAgent",
           "when": "view == acp-chat"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "acp.connectAgent",
-          "when": "view == acp-sessions && viewItem == agent-disconnected",
-          "group": "inline"
-        },
-        {
-          "command": "acp.disconnectAgent",
-          "when": "view == acp-sessions && viewItem == agent-connected",
-          "group": "inline"
-        },
-        {
-          "command": "acp.removeAgent",
-          "when": "view == acp-sessions && viewItem =~ /^agent/"
-        },
-        {
-          "command": "acp.restartAgent",
-          "when": "view == acp-sessions && viewItem == agent-connected"
-        },
-        {
-          "command": "acp.refreshSessions",
-          "when": "view == acp-sessions && viewItem =~ /^agent/",
-          "group": "session@1"
-        },
-        {
-          "command": "acp.copySessionId",
-          "when": "view == acp-sessions && viewItem =~ /^session/",
-          "group": "session@1"
-        },
-        {
-          "command": "acp.forgetSession",
-          "when": "view == acp-sessions && viewItem == session-local",
-          "group": "session@2"
         }
       ]
     },
@@ -383,6 +298,11 @@
           "type": "string",
           "default": "",
           "description": "Default working directory for agent sessions. Leave empty to use the current workspace folder."
+        },
+        "acp.defaultAgent": {
+          "type": "string",
+          "default": "",
+          "description": "Agent to auto-connect on startup (ready-to-use). Must match a name in acp.agents. If empty and exactly one agent is configured, that one is used."
         },
         "acp.logTraffic": {
           "type": "boolean",

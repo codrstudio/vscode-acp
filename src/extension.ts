@@ -39,10 +39,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- UI ---
   const workspaceCwd = () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  // A caixa "Agents" (tree) foi removida — o provider fica vivo só pra não
+  // quebrar comandos que o referenciam; a UI de gestão volta no gestor de agentes.
   const sessionTreeProvider = new SessionTreeProvider(sessionManager, historyStore, workspaceCwd);
-  const treeView = vscode.window.createTreeView('acp-sessions', {
-    treeDataProvider: sessionTreeProvider,
-  });
 
   const chatWebviewProvider = new ChatWebviewProvider(
     context.extensionUri,
@@ -56,6 +55,13 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   const statusBarManager = new StatusBarManager(sessionManager);
+
+  // Arquivo aberto no editor → auto-contexto no chat (o chip "aberto").
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      chatWebviewProvider.setActiveFile(editor?.document);
+    }),
+  );
 
   // Notify chat webview when active session changes
   sessionManager.on('active-session-changed', () => {
@@ -159,39 +165,53 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
-  // New Conversation (disconnect + clear chat + reconnect same agent)
+  // Novo chat (+). Escolhe o agente: 1 → direto; >1 → o usuário escolhe.
   const newConversationCmd = vscode.commands.registerCommand('acp.newConversation', async () => {
-    const activeSession = sessionManager.getActiveSession();
-    if (!activeSession) {
-      // No active agent — fall back to connect
-      await vscode.commands.executeCommand('acp.connectAgent');
+    const names = getAgentNames();
+    if (names.length === 0) {
+      vscode.window.showWarningMessage('Nenhum agente configurado. Adicione um em Settings › ACP › Agents.');
       return;
     }
+    let agentName: string;
+    if (names.length === 1) {
+      agentName = names[0];
+    } else {
+      const picked = await vscode.window.showQuickPick(names, {
+        placeHolder: 'Escolha o agente para a nova conversa',
+        title: 'Nova conversa',
+      });
+      if (!picked) { return; }
+      agentName = picked;
+    }
 
-    // Confirm if there's existing chat content
     if (chatWebviewProvider.hasChatContent) {
       const choice = await vscode.window.showWarningMessage(
-        'Start a new conversation? This will clear the current chat history.',
-        'New Conversation',
-        'Cancel',
+        'Iniciar nova conversa? Isto limpa o chat atual.',
+        'Nova conversa',
+        'Cancelar',
       );
-      if (choice !== 'New Conversation') { return; }
+      if (choice !== 'Nova conversa') { return; }
+      chatWebviewProvider.clearChat();
     }
 
     try {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Starting new conversation with ${activeSession.agentDisplayName}...`,
+          title: `Conversa com ${agentName}…`,
           cancellable: false,
         },
         async () => {
-          await sessionManager.newConversation();
+          if (sessionManager.getActiveAgentName() === agentName) {
+            await sessionManager.newConversation();
+          } else {
+            await sessionManager.connectToAgent(agentName);
+          }
         },
       );
     } catch (e: any) {
       logError('Failed to start new conversation', e);
-      vscode.window.showErrorMessage(`Failed to start new conversation: ${e.message}`);
+      vscode.window.showErrorMessage(`Falha ao iniciar conversa: ${e.message}`);
     }
   });
 
@@ -466,7 +486,7 @@ export function activate(context: vscode.ExtensionContext): void {
       title: 'Attach File to Chat',
     });
     if (uris && uris.length > 0) {
-      chatWebviewProvider.attachFile(uris[0]);
+      await chatWebviewProvider.attachFile(uris[0]);
     }
   });
 
@@ -495,7 +515,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Register disposables ---
   context.subscriptions.push(
-    treeView,
     chatViewRegistration,
     statusBarManager,
     connectAgentCmd,
@@ -529,6 +548,50 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     },
   );
+
+  // --- Conexão automática e persistente (KeepCodium: sem botão de conectar) ---
+  // Alvo: acp.defaultAgent (se válido), senão o único configurado. Com vários e
+  // sem default, não adivinha. Mesma resolução no boot e na reconexão.
+  const resolveDefaultAgent = (): string | undefined => {
+    const names = getAgentNames();
+    if (names.length === 0) { return undefined; }
+    const preferred = vscode.workspace.getConfiguration('acp').get<string>('defaultAgent')?.trim();
+    if (preferred && names.includes(preferred)) { return preferred; }
+    if (names.length === 1) { return names[0]; }
+    return undefined;
+  };
+
+  // Boot: abre já conectada.
+  void (async () => {
+    try {
+      if (sessionManager.getActiveSession()) { return; }
+      const agentName = resolveDefaultAgent();
+      if (!agentName) { return; }
+      await sessionManager.connectToAgent(agentName);
+      log(`Auto-connected to "${agentName}".`);
+    } catch (e) {
+      logError('Auto-connect failed', e);
+    }
+  })();
+
+  // Auto-reconnect: se a conexão cair, reata sozinha (debounce 2s; ignora as
+  // desconexões transitórias de newConversation, que já reconectam por conta).
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  sessionManager.on('agent-disconnected', () => {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); }
+    reconnectTimer = setTimeout(async () => {
+      if (sessionManager.getActiveSession()) { return; } // já reconectou por outro caminho
+      const agentName = resolveDefaultAgent();
+      if (!agentName) { return; }
+      try {
+        await sessionManager.connectToAgent(agentName);
+        log(`Auto-reconnected to "${agentName}".`);
+      } catch (e) {
+        logError('Auto-reconnect failed', e);
+      }
+    }, 2000);
+  });
+  context.subscriptions.push({ dispose: () => { if (reconnectTimer) { clearTimeout(reconnectTimer); } } });
 
   sendEvent('extension/activated', { version: vscode.extensions.getExtension('formulahendry.acp-client')?.packageJSON?.version ?? 'unknown' });
   log('ACP Client extension activated.');

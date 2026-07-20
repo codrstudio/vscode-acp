@@ -1,4 +1,52 @@
-# ACP Client for VS Code
+# vscode-acp — a extensão ACP do KeepCodium
+
+> **Este é um fork.** `codrstudio/vscode-acp`, MIT, a partir de [`formulahendry/vscode-acp`](https://github.com/formulahendry/vscode-acp).
+> Frente: `mind/effort/on/keepcodium-extensao.md` (filha de `kai-viva`). Doc original preservada abaixo.
+
+É a peça que, sobre um **VSCodium empacotado**, vira o **KeepCodium**: o app da casa que abre e já conversa com a Kai.
+
+## Por que este fork existe
+
+Survey de clientes ACP (2026-07-19), critério decisivo = **mandar mensagem em pleno turno** (fila, como no Claude Code):
+
+| cliente | licença | fila | veredito |
+|---|---|---|---|
+| Zed | GPL-3.0 | ✅ | experiência fantástica, mas compilar é inviável (Rust/MSVC, sem cross-compile) |
+| ACP Pro | proprietária | ✅ | única com fila boa — mas licença veta empacotar |
+| acp-ui | MIT | ❌ | simples demais |
+| omercnet/vscode-acp | MIT | ❌ | trava por design |
+| **formulahendry/vscode-acp** | **MIT** | ❌ | **a mais madura das OSS → base deste fork** |
+
+A fila é a única coisa que falta numa base MIT boa. Construímos ela.
+
+## O trabalho
+
+**1. A fila (o motivo do fork).** O gargalo é 100% do lado cliente:
+
+- `src/ui/ChatWebviewProvider.ts:1446` — `setProcessing(processing)` faz `promptInput.disabled = true` durante o turno e troca o botão pra "■ Stop". É a linha que trava.
+- O lado-agente **já aguenta**: o nosso `acp-agent.mjs` (em `workspace/guga/hands/src/`) tem `promptIterable`/`pushText`, que empilha múltiplos prompts na mesma sessão.
+- Logo: manter o input vivo + enfileirar no webview + despachar em sequência.
+
+**2. Rebrand** — identidade KeepCoding (laranja `#e35336`, ícone k-brackets, Philosopher — ver o CASA.md da kai-viva).
+
+**3. Empacotamento** — VSCodium + esta extensão = KeepCodium distribuível (mac/linux/windows pelo caminho do próprio VSCodium).
+
+## Git
+
+- `origin` → `codrstudio/vscode-acp` (nosso)
+- `upstream` → `formulahendry/vscode-acp` (original MIT, pra puxar melhorias)
+
+## Kai como agente (settings)
+
+```json
+"acp.agents": {
+  "Kai": { "command": "node", "args": ["D:\\kai\\workspace\\guga\\hands\\src\\acp-agent.mjs"], "env": {} }
+}
+```
+
+---
+
+# ACP Client for VS Code (doc original do upstream)
 
 A [Visual Studio Code extension](https://marketplace.visualstudio.com/items?itemName=formulahendry.acp-client) that provides a client for the [Agent Client Protocol (ACP)](https://agentclientprotocol.com/) — connect to any ACP-compatible AI coding agent directly from your editor.
 
